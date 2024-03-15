@@ -30,7 +30,7 @@ const rubyChange: Change = {
   name: 'actionsomething',
   version: '3.2.0',
   package_url: 'pkg:gem/actionsomething@3.2.0',
-  license: 'BSD',
+  license: '0BSD',
   source_repository_url: 'github.com/some-repo',
   scope: 'runtime',
   vulnerabilities: [
@@ -75,6 +75,26 @@ const pipChange: Change = {
   ]
 }
 
+const mavenChange: Change = {
+  change_type: 'added',
+  manifest: 'settings.gradle',
+  ecosystem: 'maven',
+  name: 'package-1',
+  version: '1.1.1',
+  package_url: 'pkg:maven/group/module@1.1.1',
+  license: 'GPL-3.0-or-later OR Apache-2.0',
+  source_repository_url: 'github.com/some-repo',
+  scope: 'runtime',
+  vulnerabilities: [
+    {
+      severity: 'high',
+      advisory_ghsa_id: 'second-random_string',
+      advisory_summary: 'not critical but still',
+      advisory_url: 'github.com/future-funk'
+    }
+  ]
+}
+
 jest.mock('@actions/core')
 
 const mockOctokit = {
@@ -100,11 +120,6 @@ jest.mock('octokit', () => {
 
 beforeEach(async () => {
   jest.resetModules()
-  jest.doMock('spdx-satisfies', () => {
-    // mock spdx-satisfies return value
-    // true for BSD, false for all others
-    return jest.fn((license: string, _: string): boolean => license === 'BSD')
-  })
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   ;({getInvalidLicenseChanges} = require('../src/licenses'))
 })
@@ -112,7 +127,7 @@ beforeEach(async () => {
 test('it adds license outside the allow list to forbidden changes', async () => {
   const changes: Changes = [npmChange, rubyChange]
   const {forbidden} = await getInvalidLicenseChanges(changes, {
-    allow: ['BSD']
+    allow: ['0BSD']
   })
   expect(forbidden[0]).toBe(npmChange)
   expect(forbidden.length).toEqual(1)
@@ -121,7 +136,7 @@ test('it adds license outside the allow list to forbidden changes', async () => 
 test('it adds license inside the deny list to forbidden changes', async () => {
   const changes: Changes = [npmChange, rubyChange]
   const {forbidden} = await getInvalidLicenseChanges(changes, {
-    deny: ['BSD']
+    deny: ['0BSD']
   })
   expect(forbidden[0]).toBe(rubyChange)
   expect(forbidden.length).toEqual(1)
@@ -133,7 +148,7 @@ test('it does not add license outside the allow list to forbidden changes if it 
     {...rubyChange, change_type: 'removed'}
   ]
   const {forbidden} = await getInvalidLicenseChanges(changes, {
-    allow: ['BSD']
+    allow: ['0BSD']
   })
   expect(forbidden).toStrictEqual([])
 })
@@ -144,7 +159,7 @@ test('it does not add license inside the deny list to forbidden changes if it is
     {...rubyChange, change_type: 'removed'}
   ]
   const {forbidden} = await getInvalidLicenseChanges(changes, {
-    deny: ['BSD']
+    deny: ['0BSD']
   })
   expect(forbidden).toStrictEqual([])
 })
@@ -156,33 +171,28 @@ test('it adds license outside the allow list to forbidden changes if it is in bo
     {...rubyChange, change_type: 'removed'}
   ]
   const {forbidden} = await getInvalidLicenseChanges(changes, {
-    allow: ['BSD']
+    allow: ['0BSD']
   })
   expect(forbidden).toStrictEqual([npmChange])
 })
 
 test('it adds all licenses to unresolved if it is unable to determine the validity', async () => {
-  jest.resetModules() // reset module set in before
-  jest.doMock('spdx-satisfies', () => {
-    return jest.fn((_first: string, _second: string) => {
-      throw new Error('Some Error')
-    })
-  })
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  ;({getInvalidLicenseChanges} = require('../src/licenses'))
-  const changes: Changes = [npmChange, rubyChange]
+  const invalidLicense = Object.assign({}, npmChange)
+  invalidLicense.license = 'BSD'
+
+  const changes: Changes = [invalidLicense, rubyChange]
   const invalidLicenses = await getInvalidLicenseChanges(changes, {
-    allow: ['BSD']
+    allow: ['0BSD']
   })
   expect(invalidLicenses.forbidden.length).toEqual(0)
   expect(invalidLicenses.unlicensed.length).toEqual(0)
-  expect(invalidLicenses.unresolved.length).toEqual(2)
+  expect(invalidLicenses.unresolved.length).toEqual(1)
 })
 
 test('it does not filter out changes that are on the exclusions list', async () => {
   const changes: Changes = [pipChange, npmChange, rubyChange]
   const licensesConfig = {
-    allow: ['BSD'],
+    allow: ['0BSD'],
     licenseExclusions: ['pkg:pypi/package-1@1.1.1', 'pkg:npm/reeuhq@1.0.2']
   }
   const invalidLicenses = await getInvalidLicenseChanges(
@@ -193,12 +203,12 @@ test('it does not filter out changes that are on the exclusions list', async () 
 })
 
 test('it does not fail when the packages dont have a valid PURL', async () => {
-  const emptyPurlChange = pipChange
+  const emptyPurlChange = Object.assign({}, pipChange)
   emptyPurlChange.package_url = ''
 
   const changes: Changes = [emptyPurlChange, npmChange, rubyChange]
   const licensesConfig = {
-    allow: ['BSD'],
+    allow: ['0BSD'],
     licenseExclusions: ['pkg:pypi/package-1@1.1.1', 'pkg:npm/reeuhq@1.0.2']
   }
 
@@ -212,7 +222,7 @@ test('it does not fail when the packages dont have a valid PURL', async () => {
 test('it does filters out changes if they are not on the exclusions list', async () => {
   const changes: Changes = [pipChange, npmChange, rubyChange]
   const licensesConfig = {
-    allow: ['BSD'],
+    allow: ['0BSD'],
     licenseExclusions: [
       'pkg:pypi/notmypackage-1@1.1.1',
       'pkg:npm/alsonot@1.0.2'
